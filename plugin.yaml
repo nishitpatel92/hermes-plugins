@@ -1,0 +1,9 @@
+manifest_version: 1
+name: host-logs
+version: 0.1.0
+description: Read-only access to logs of containers running on the homelab host, via a hardened docker-socket-proxy. Exposes host_logs (fetch logs by container name) and host_containers (list host containers).
+author: nishitpatel92
+provides_tools:
+  - host_logs
+  - host_containers
+provides_hooks: []

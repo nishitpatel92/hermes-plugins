@@ -1,100 +1,56 @@
-# host-logs hermes plugin
+# hermes-plugins
 
-Read-only access to homelab host container logs from a Hermes agent — without giving the agent (or its sandboxes) any write capability on the host docker daemon.
+A collection of [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugins maintained by [@nishitpatel92](https://github.com/nishitpatel92). Each subdirectory is a self-contained plugin with its own `plugin.yaml`, `__init__.py`, and README.
 
-Adds two tools the agent can call:
+## Index
 
-- **`host_logs(container, tail=200, stdout=true, stderr=true, since=0)`** — fetch recent stdout/stderr from a container running on the homelab host (`worklane-api`, `caddy`, `n8n`, `hermes` itself, …). Read-only. Cannot start/stop/exec the container.
-- **`host_containers(all=false)`** — list containers on the host so the agent can discover names to pass to `host_logs`.
-
-## Why
-
-Hermes spawns its agent commands inside sandbox containers (via `terminal.backend: docker` in dind). Sandboxes can't see host containers — different daemon. To debug host-side services from an agent session, the agent needs *some* path to the host daemon. This plugin takes the narrowest viable path:
-
-1. A separate [`tecnativa/docker-socket-proxy`](https://github.com/Tecnativa/docker-socket-proxy) container bind-mounts `/var/run/docker.sock` on the host and exposes it as HTTP, with **only read endpoints enabled** (`CONTAINERS=1`, `LOGS=1`, `INFO=1`, …; `POST=0`). Write/exec/destroy verbs return 403.
-2. The plugin runs inside the hermes process and queries the proxy. The agent's *sandbox* never gets the socket.
-
-Even if the hermes process is fully compromised, the attacker's host-daemon access is limited to list/inspect/log — no `docker run`, no `exec`, no `kill`.
-
-## Setup
-
-### 1. Run the docker-socket-proxy
-
-Add a `socket-proxy` service on the same docker network as hermes. Example compose:
-
-```yaml
-networks:
-  main-network:
-    name: main-network
-    external: true
-
-services:
-  socket-proxy:
-    image: tecnativa/docker-socket-proxy:latest
-    container_name: socket-proxy
-    restart: unless-stopped
-    environment:
-      CONTAINERS: 1
-      LOGS: 1
-      INFO: 1
-      VERSION: 1
-      EVENTS: 1
-      PING: 1
-      POST: 0
-      DELETE: 0
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      main-network: {}
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 64M
-```
-
-The plugin defaults to `http://socket-proxy:2375`. Override with `HERMES_HOST_LOGS_PROXY=http://other:2375` in hermes' env if you run the proxy elsewhere.
-
-### 2. Install the plugin in hermes
-
-```sh
-hermes plugins install nishitpatel92/hermes-plugins
-```
-
-The plugin clones into `~/.hermes/plugins/host-logs/`. Restart hermes (or recreate the container) so the plugin's `register()` runs and the tools become available.
-
-```sh
-hermes plugins list
-# host-logs … enabled
-```
-
-### 3. Try it from a chat / gateway session
-
-```
-> What does worklane-api look like in the logs right now?
-
-The agent calls host_logs(container="worklane-api", tail=100) and reports back.
-```
-
-## Configuration
-
-| Env var | Default | Purpose |
+| Plugin | Surface | Purpose |
 |---|---|---|
-| `HERMES_HOST_LOGS_PROXY` | `http://socket-proxy:2375` | Base URL of the docker-socket-proxy. |
+| [`host-logs`](./host-logs) | `register_tool` × 2 | Read-only access to homelab host container logs via a hardened docker-socket-proxy. |
 
-## Behavior notes
+## Installing a plugin
 
-- **Output cap**: `host_logs` truncates returned text to ~100 KB and notes the truncation. Override the limit by editing `MAX_RESULT_BYTES` in `__init__.py` if you really need more in one call.
-- **Multiplexed log streams**: docker logs API uses a multiplexed framing format for non-TTY containers. The plugin demuxes correctly and merges stdout+stderr in chronological order.
-- **`since`**: integer seconds ago. The proxy itself accepts a Unix timestamp; the plugin computes that from the relative value at request time.
-- **Stopped containers**: `host_containers(all=true)` includes them; `host_logs` works on them too (logs from before they stopped).
+Hermes' `hermes plugins install <user>/<repo>` command treats the whole repo as a single plugin, so for a multi-plugin repo like this one you install each plugin manually:
 
-## Security
+```bash
+git clone https://github.com/nishitpatel92/hermes-plugins.git
+cp -r hermes-plugins/<plugin-name> ~/.hermes/plugins/
 
-- All host-daemon access goes through the proxy. The plugin does not bind-mount `/var/run/docker.sock` into hermes itself.
-- The proxy's `:ro` mount of the host socket only restricts file-level perms, not API-level — the read-only enforcement is provided by the proxy's own ENV-driven endpoint allowlist (`POST=0`).
-- The plugin runs in hermes' Python process, not in agent sandboxes. Sandbox compromise has zero added blast radius from this plugin.
+# enable it
+hermes plugins enable <plugin-name>
+```
+
+Restart Hermes (or recreate the gateway container) so the plugin's `register()` runs and any new tools/hooks become available:
+
+```bash
+hermes plugins list
+# <plugin-name> … enabled
+```
+
+To uninstall: `rm -rf ~/.hermes/plugins/<plugin-name>` and `hermes plugins disable <plugin-name>`.
+
+## Updating
+
+```bash
+cd /path/to/hermes-plugins && git pull
+cp -r <plugin-name>/. ~/.hermes/plugins/<plugin-name>/
+```
+
+Re-copying is intentional — Hermes loads plugins from `~/.hermes/plugins/`, not from this clone, so changes here don't propagate until you copy them in. If you'd rather skip the copy step, symlink the plugin instead: `ln -s "$(pwd)/<plugin-name>" ~/.hermes/plugins/<plugin-name>`.
+
+## Adding a plugin
+
+Each plugin lives in its own subdirectory at the repo root. The minimum layout is:
+
+```
+<plugin-name>/
+├── plugin.yaml      # manifest (name, version, description, provides_tools, …)
+├── __init__.py      # exports register(ctx)
+└── README.md        # what it does, install/config notes
+```
+
+See the official [build-a-hermes-plugin guide](https://hermes-agent.nousresearch.com/docs/guides/build-a-hermes-plugin) for the full plugin surface, and any plugin in this repo as a working example. Keep each plugin self-contained — no shared utilities across plugin dirs.
 
 ## License
 
-MIT.
+MIT — see [LICENSE](./LICENSE). Individual plugins inherit this unless their own README says otherwise.

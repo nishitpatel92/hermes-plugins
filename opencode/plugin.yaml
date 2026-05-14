@@ -1,0 +1,17 @@
+manifest_version: 1
+name: opencode
+version: 0.1.0
+description: First-class tools for invoking opencode from Hermes — opencode_run plus session/stats/diagnostic siblings — with a pre_tool_call hook that enforces the oc-wrapper discipline (background+timeout, no bare opencode run, no opencode pr from headless, no opencode auth login).
+author: nishitpatel92
+provides_tools:
+  - opencode_run
+  - opencode_session_list
+  - opencode_session_delete
+  - opencode_session_export
+  - opencode_session_import
+  - opencode_stats
+  - opencode_models
+  - opencode_debug_config
+  - opencode_version
+provides_hooks:
+  - pre_tool_call

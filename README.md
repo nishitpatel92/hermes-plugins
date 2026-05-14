@@ -7,6 +7,7 @@ A collection of [Hermes Agent](https://github.com/NousResearch/hermes-agent) plu
 | Plugin | Surface | Purpose |
 |---|---|---|
 | [`host-logs`](./host-logs) | `register_tool` × 2 | Read-only access to homelab host container logs via a hardened docker-socket-proxy. |
+| [`opencode`](./opencode) | `register_tool` × 9 + `pre_tool_call` hook | First-class tools for invoking opencode from Hermes (one-shot runs, sessions, stats, diagnostics) with enforcement of the `oc`-wrapper discipline. See [DESIGN.md](./opencode/DESIGN.md) for the full research and roadmap. |
 
 ## Installing a plugin
 

@@ -1,6 +1,6 @@
 manifest_version: 1
 name: opencode
-version: 0.1.0
+version: 0.1.1
 description: First-class tools for invoking opencode from Hermes — opencode_run plus session/stats/diagnostic siblings — with a pre_tool_call hook that enforces the oc-wrapper discipline (background+timeout, no bare opencode run, no opencode pr from headless, no opencode auth login).
 author: nishitpatel92
 provides_tools:

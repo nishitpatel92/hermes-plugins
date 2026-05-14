@@ -284,34 +284,36 @@ def _opencode_run(ctx, args: dict) -> dict:
     command = " ".join(cmd_parts)
     logger.info("[opencode plugin] dispatching: %s", _truncate_for_log(command))
 
-    # Phase 1: start opencode in the background (oc wraps in `timeout 3600`)
+    # Run foreground. `oc` itself wraps in `timeout --kill-after=10s 3600`,
+    # so the kernel-level ceiling is already enforced; we just need the
+    # Hermes terminal call to wait long enough for it.
+    #
+    # We deliberately do NOT use background=true + process(action="wait").
+    # That pattern was the original plan to dodge the default 600s
+    # TERMINAL_MAX_FOREGROUND_TIMEOUT cap, but it triggers a bug in Hermes'
+    # persistent-shell process registry: the spawn returns "Background
+    # process started" synchronously, but the wrapper that should write
+    # the exit-code file never runs, so process(wait) reports exit_code=-1
+    # with empty output a few seconds later. Foreground works correctly.
+    #
+    # Required env (set in hermes' compose + config.yaml + .env):
+    #   TERMINAL_MAX_FOREGROUND_TIMEOUT=3600
+    #   TERMINAL_TIMEOUT=3600
+    #   TERMINAL_LIFETIME_SECONDS=3600
+    # See compose_files/hermes/CLAUDE.md invariant 9.
     started_at = time.monotonic()
-    start = _dispatch(ctx, "terminal", {
+    result = _dispatch(ctx, "terminal", {
         "command": command,
         "workdir": workdir,
-        "background": True,
-        "timeout": 3600,
-        "notify_on_complete": True,
-    })
-
-    session_id_terminal = start.get("session_id") or start.get("sessionId")
-    if not session_id_terminal:
-        return {
-            "status": "error",
-            "error": "terminal tool did not return a session_id",
-            "terminal_response": start,
-        }
-
-    # Phase 2: wait for completion
-    wait = _dispatch(ctx, "process", {
-        "action": "wait",
-        "session_id": session_id_terminal,
         "timeout": 3600,
     })
 
     duration_ms = int((time.monotonic() - started_at) * 1000)
-    exit_code = wait.get("exit_code")
-    output = wait.get("output") or ""
+    exit_code = result.get("exit_code")
+    output = result.get("output") or ""
+    session_id_terminal = (
+        result.get("session_id") or result.get("sessionId") or ""
+    )
 
     status, exit_meaning = formats.decode_exit_code(exit_code)
 
